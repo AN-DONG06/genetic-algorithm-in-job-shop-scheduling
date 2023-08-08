@@ -1,0 +1,134 @@
+import pandas as pd
+import numpy as np
+import time
+import copy
+
+import matplotlib.pyplot as plt
+import chart_studio.plotly as py
+import plotly.figure_factory as ff
+import datetime
+
+
+if __name__ == '__main__':
+    ''' ================= thông số ======================'''
+
+    tg_tmp = pd.read_excel("JSP_dataset09.xlsx", sheet_name="Processing Time", index_col=[0])
+    tt_tmp = pd.read_excel("JSP_dataset09.xlsx", sheet_name="Machines Sequence", index_col=[0])
+    dd_tmp = pd.read_excel("JSP_dataset09.xlsx", sheet_name="Due date", index_col=[0]) 
+
+    df_shapecv = tg_tmp.shape
+    df_shapemay = tt_tmp.shape
+    num_may = df_shapemay[1]  
+    print("máy",num_may)
+    num_cv = df_shapecv[0] 
+    print("cv",num_cv)
+    
+    num_gene = num_may * num_cv 
+
+    tg = [list(map(int, tg_tmp.iloc[i])) for i in range(num_cv)]
+    tt = [list(map(int, tt_tmp.iloc[i])) for i in range(num_cv)]
+    dd = [list(dd_tmp.iloc[i]) for i in range(num_cv)]
+    kichthuoc_qt = int(input('Số lượng cá thể: ') or 200)
+    tl_laicheo = float(input('Tỷ lệ lai chéo: ') or 0.8) 
+    tl_dotbien = float(input('Tỷ lệ đột biến: ') or 0.2) 
+    tl_chon = 0.3
+    num_cv_dotbien = round(num_gene * tl_chon)
+    num_lap = int(input('Số lần lặp: ') or 200) 
+
+    start_time = time.time()
+  
+
+'''==================== main code ==============================='''
+            '''----- tạo quần thể -----'''
+    Tbest = 999999999999999
+
+    quanthe_list = []
+    tardiness_record = []
+    for i in range(kichthuoc_qt):
+        nxm_random_num = list(np.random.permutation(num_gene)) 
+        quanthe_list.append(nxm_random_num) 
+        for j in range(num_gene):
+          quanthe_list[i][j] = quanthe_list[i][j] % num_cv 
+    for n in range(num_lap):
+        Tbest_now = 99999999999
+
+        '''--------lai chéo ox --------'''
+        parent_list = copy.deepcopy(quanthe_list)
+        child_list = copy.deepcopy(quanthe_list)
+        S = list(np.random.permutation(
+            kichthuoc_qt)) 
+        
+        for m in range(int(kichthuoc_qt / 2)):
+            xs_laicheo = np.random.rand()
+            if tl_laicheo >= xs_laicheo:
+              parent_1 = quanthe_list[S[2 * m]][:]
+              parent_2 = quanthe_list[S[2 * m + 1]][:]
+              child_1 = parent_1[:]
+              child_2 = parent_2[:]
+              cutpoint = list(np.random.choice(num_gene, 2, replace=False)) #điểm cắt ngẫu nhiên
+              cutpoint.sort()
+              child_1[cutpoint[0]:cutpoint[1]] = parent_2[cutpoint[0]:cutpoint[1]]
+              child_2[cutpoint[0]:cutpoint[1]] = parent_1[cutpoint[0]:cutpoint[1]]
+              child_list[S[2 * m]] = child_1[:]
+              child_list[S[2 * m + 1]] = child_2[:]
+
+        '''----------thay thế-------------'''
+        for m in range(kichthuoc_qt):
+            cv_count = {}
+            larger, less = [], []  
+            for i in range(num_cv):
+                if i in child_list[m]:
+                    count = child_list[m].count(i)
+                    pos = child_list[m].index(i)
+                    cv_count[i] = [count, pos]  
+                else:
+                  count = 0
+                  cv_count[i] = [count, 0]
+                if count > num_may:
+                  larger.append(i)
+                elif count < num_may:
+                  less.append(i)
+
+            for k in range(len(larger)):
+                chg_cv = larger[k]
+                while cv_count[chg_cv][0] > num_may:
+                    for d in range(len(less)):
+                        if cv_count[less[d]][0] < num_may:
+                            child_list[m][cv_count[chg_cv][1]] = less[d]
+                            cv_count[chg_cv][1] = child_list[m].index(chg_cv)
+                            cv_count[chg_cv][0] = cv_count[chg_cv][0] - 1
+                            cv_count[less[d]][0] = cv_count[less[d]][0] + 1
+                        if cv_count[chg_cv][0] == num_may:
+                            break
+                          cv_count[i] = [count, 0]
+                      if count > num_may:
+                        larger.append(i)
+                      elif count < num_may:
+                        less.append(i)
+              for k in range(len(larger)):
+                chg_cv = larger[k]
+                while cv_count[chg_cv][0] > num_may:
+                    for d in range(len(less)):
+                        if cv_count[less[d]][0] < num_may:
+                            child_list[m][cv_count[chg_cv][1]] = less[d]
+                            cv_count[chg_cv][1] = child_list[m].index(chg_cv)
+                            cv_count[chg_cv][0] = cv_count[chg_cv][0] - 1
+                            cv_count[less[d]][0] = cv_count[less[d]][0] + 1
+                        if cv_count[chg_cv][0] == num_may:
+                            break
+        total_chromosome = copy.deepcopy(parent_list) + copy.deepcopy(child_list)  
+        chrom_fitness, chrom_fit, Cmax = [], [], [] 
+        total_fitness = 0
+
+        for m in range(kichthuoc_qt * 2):
+            j_keys = [j for j in range(num_cv)]
+            key_count = {key: 0 for key in j_keys}
+            j_count = {key: 0 for key in j_keys}
+            m_keys = [j + 1 for j in range(num_may)]
+            m_count = {key: 0 for key in m_keys}
+            d_list = []
+            list_tardiness = []
+
+            for i in total_chromosome[m]:
+              gen_t = int(tg[i][key_count[i]])
+              gen_m = int(tt[i][key_count[i]])
